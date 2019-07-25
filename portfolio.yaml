@@ -1,0 +1,682 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ' This cloudformation template creates resources for Data lake workshop.(fdp-5o24sdsdpoh)'
+Parameters:
+  cidrVPC:
+    Description: >-
+      An available CIDR block for creating a new VPC. 
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.0.0/16
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  cidrPrivateSubnet1:
+    Description: >-
+      An available CIDR block for creating a new private subnet. 
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.3.0/24
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  cidrPrivateSubnet2:
+    Description: >-
+      An available CIDR block for creating a new private subnet. 
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.2.0/24
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  cidrPublicSubnet:
+    Description: >-
+      An available CIDR block for creating a new public subnet. 
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.1.0/24
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+Resources:
+  Portfolio:
+    Type: AWS::ServiceCatalog::Portfolio
+    Properties:
+      AcceptLanguage: en
+      Description: Analytics Team portfolio
+      DisplayName: Analytics Team portfolio
+      ProviderName: CCOE
+  EndUserPortfolioPrincipalAssociation:
+    Type: AWS::ServiceCatalog::PortfolioPrincipalAssociation
+    Properties:
+      AcceptLanguage: en
+      PortfolioId: !Ref 'Portfolio'
+      PrincipalARN: !GetAtt 'EndUser.Arn'
+      PrincipalType: IAM
+
+  ProdGlue:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Owner: Example Corp
+      SupportDescription: Support Description
+      Description: This product creates a Glue Crawler.
+      Distributor: Example Corp
+      SupportEmail: email@example.com
+      AcceptLanguage: en
+      SupportUrl: https://example.com
+      Name: !Sub 'Glue Crawler'
+      ProvisioningArtifactParameters:
+        - Description: Base Version
+          Info:
+            LoadTemplateFromURL: https://raw.githubusercontent.com/aws-samples/aws-service-catalog-for-data-lake-hydration/master/glue.yaml
+          Name: V1.0
+  GluePortfolioAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    DependsOn:
+      - Portfolio
+      - ProdGlue
+    Properties:
+      AcceptLanguage: en
+      PortfolioId: !Ref 'Portfolio'
+      ProductId: !Ref 'ProdGlue'
+  GlueLaunchConstraint:
+    Type: "AWS::ServiceCatalog::LaunchRoleConstraint"
+    DependsOn:
+      - Portfolio
+      - ProdGlue
+      - GlueLaunchRole
+      - GluePortfolioAssociation
+    Properties:
+      AcceptLanguage: "en"
+      Description: "This launch constraint ensures that analysts who have access to this portfolio can ask Service Catalog to a launch Glue Crawler successfully."
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdGlue 
+      RoleArn: !GetAtt GlueLaunchRole.Arn
+  GlueLaunchRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - servicecatalog.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: GlueLaunchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: GluePolicy
+                Effect: Allow
+                Action:
+                  - catalog-user:*
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:UpdateStack
+                  - s3:GetObject
+                  - glue:*Crawler
+                  - glue:*Database
+                Resource: '*'
+              - Sid: PassRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:  
+                  - arn:aws:iam::*:role/*GlueCrawlerRole*
+                Condition:
+                  ForAnyValue:StringEqualsIfExists:
+                    iam:PassedToService:
+                    - glue.amazonaws.com
+  ProdDMS:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Owner: Example Corp
+      SupportDescription: DMS Task
+      Description: This product creates a DMS Task for hydrating data lake.
+      Distributor: Example Corp
+      SupportEmail: email@example.com
+      AcceptLanguage: en
+      SupportUrl: https://example.com
+      Name: !Sub 'A DMS Task'
+      ProvisioningArtifactParameters:
+        - Description: Base Version
+          Info:
+            LoadTemplateFromURL:  https://raw.githubusercontent.com/aws-samples/aws-service-catalog-for-data-lake-hydration/master/DMSWithExternalDB.yml
+          Name: V1.0
+  DMSPortfolioAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    DependsOn:
+      - Portfolio
+      - ProdDMS
+    Properties:
+      AcceptLanguage: en
+      PortfolioId: !Ref 'Portfolio'
+      ProductId: !Ref 'ProdDMS'
+  DMSTemplateConstraint1:
+    Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
+    DependsOn:
+      - Portfolio
+      - ProdDMS
+    Properties:
+      AcceptLanguage: "en"
+      Description: "Only specific VPC allowed"
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdDMS
+      Rules: '{"VPCID":{"Assertions":[{"Assert":{"Fn::EachMemberEquals":[{"Fn::ValueOfAll":["AWS::EC2::VPC::Id","Tags.Team-type"]},"Analyst-Team"]},"AssertDescription":"Only display VPC specific for analyst team"}]}}'
+  DMSTemplateConstraintPrivateSubnet2:
+    Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
+    DependsOn:
+      - Portfolio
+      - ProdDMS
+    Properties:
+      AcceptLanguage: "en"
+      Description: "Only specific subnet allowed"
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdDMS
+      Rules: '{"Private2":{"Assertions":[{"Assert":{"Fn::EachMemberEquals":[{"Fn::ValueOfAll":["AWS::EC2::Subnet::Id","Tags.type"]},"Private"]},"AssertDescription":"Only display subnets specific for Team"}]}}'
+  DMSTemplateConstraintPrivateSubnet1:
+    Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
+    DependsOn:
+      - Portfolio
+      - ProdDMS
+    Properties:
+      AcceptLanguage: "en"
+      Description: "Only specific subnet allowed"
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdDMS
+      Rules: '{"Private1":{"Assertions":[{"Assert":{"Fn::EachMemberEquals":[{"Fn::ValueOfAll":["AWS::EC2::Subnet::Id","Tags.type"]},"Private"]},"AssertDescription":"Only display subnets specific for Team"}]}}'
+  DMSLaunchConstraint:
+    Type: "AWS::ServiceCatalog::LaunchRoleConstraint"
+    DependsOn:
+      - Portfolio
+      - ProdDMS
+      - DMSLaunchRole
+      - DMSPortfolioAssociation
+    Properties:
+      AcceptLanguage: en
+      Description: 'This launch constraint ensures that analysts who have access to this portfolio can ask Service Catalog to a launch this product'
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdDMS 
+      RoleArn: !GetAtt DMSLaunchRole.Arn
+  DMSLaunchRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - servicecatalog.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: DMSLaunchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: LaunchConstraintPolicy
+                Effect: Allow
+                Action:
+                  - catalog-user:*
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:UpdateStack
+                  - s3:GetObject
+                Resource: '*'
+              - Sid: DMSPolicy
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                  - dms:Describe*
+                  - ec2:*SecurityGroup
+                  - ec2:*Tags
+                  - ec2:*SecurityGroupIngress
+                  - ec2:*SecurityGroupEgress
+                  - ec2:*NetworkInterface
+                  - dms:*ReplicationSubnetGroup
+                  - dms:*ReplicationInstance
+                  - kms:DescribeKey
+                  - dms:*ReplicationTask
+                  - dms:*Endpoint
+                Resource: '*'
+              - Sid: KMSGrant
+                Effect: Allow
+                Action: 
+                  - kms:CreateGrant
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:ReEncryptTo
+                  - kms:ReEncryptFrom
+                Resource: arn:aws:kms:::alias/aws/dms
+  ProdS3AndIAMRoles:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Owner: Example Corp
+      SupportDescription: Support Description
+      Description:  This product creates a S3 bucket and appropriate IAM Roles .
+      Distributor: Example Corp
+      SupportEmail: email@example.com
+      AcceptLanguage: en
+      SupportUrl: https://example.com
+      Name: !Sub 'S3 bucket and appropriate roles'
+      ProvisioningArtifactParameters:
+        - Description: Base Version
+          Info:
+            LoadTemplateFromURL: https://raw.githubusercontent.com/aws-samples/aws-service-catalog-for-data-lake-hydration/master/S3BucketAndIAMroles.yml
+          Name: v1.0
+  S3AndIAMRolesPortfolioAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    DependsOn:
+      - Portfolio
+      - ProdS3AndIAMRoles
+    Properties:
+      AcceptLanguage: 'en'
+      PortfolioId: !Ref 'Portfolio'
+      ProductId: !Ref 'ProdS3AndIAMRoles'
+  S3AndIAMRolesLaunchRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - servicecatalog.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: S3AndIAMRolesLaunchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: S3AndIAMRolesPolicy
+                Effect: Allow
+                Action:
+                  - catalog-user:*
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:UpdateStack
+                  - iam:Get*
+                  - iam:Describe*
+                Resource: '*'
+              - Sid: AttachRolePolicy
+                Effect: Allow
+                Action: 
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource:
+                - arn:aws:iam::*:role/dms-cloudwatch-logs-role
+                - arn:aws:iam::*:role/dms-vpc-role
+                - arn:aws:iam::*:role/*S3TargetDMSRole*
+                - arn:aws:iam::*:role/*GlueCrawlerRole*
+                Condition:
+                  ForAnyValue:ArnLikeIfExists:
+                    iam:PolicyARN:
+                    - arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole
+                    - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+                    - arn:aws:iam:::policy/*S3AccessForDMSPolicy*
+                    - arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole
+              - Sid: createRole
+                Effect: Allow
+                Action: 
+                - iam:CreateRole
+                - iam:UpdateRole
+                - iam:DeleteRole
+                - iam:CreateServiceLinkedRole
+                - iam:DeleteServiceLinkedRole
+                - iam:PutRolePolicy
+                Resource:
+                - arn:aws:iam::*:role/dms-cloudwatch-logs-role
+                - arn:aws:iam::*:role/dms-vpc-role
+                - arn:aws:iam::*:role/*S3TargetDMSRole*
+                - arn:aws:iam::*:role/*GlueCrawlerRole*
+              - Sid: PassRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: 
+                - arn:aws:iam::*:role/*S3TargetDMSRole*
+                - arn:aws:iam::*:role/*GlueCrawlerRole*
+                - arn:aws:iam::*:role/dms-vpc-role
+                - arn:aws:iam::*:role/dms-cloudwatch-logs-role
+                Condition:
+                  ForAnyValue:StringEqualsIfExists:
+                    iam:PassedToService:
+                    - glue.amazonaws.com
+                    - dms.amazonaws.com
+  LabTagoption:
+    DependsOn: Portfolio
+    Type: AWS::ServiceCatalog::TagOption
+    Properties:
+      Active: 'True'
+      Value: '10'
+      Key: sample-cost-center
+  TagAssoPort:
+    DependsOn: LabTagoption
+    Type: AWS::ServiceCatalog::TagOptionAssociation
+    Properties:
+      TagOptionId: !Ref 'LabTagoption'
+      ResourceId: !Ref 'Portfolio'
+  EndUser:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSServiceCatalogEndUserFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              AWS: !Sub '${AWS::AccountId}'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ServiceActionsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ActionsPolicy
+                Effect: Allow
+                Action:
+                  - servicecatalog:ListServiceActionsForProvisioningArtifact
+                  - servicecatalog:ExecuteprovisionedProductServiceAction
+                  - cloudformation:ListStackResources
+                  - glue:Get*
+                  - glue:Describe*
+                  - glue:List*
+                  - dms:Get*
+                  - dms:Describe*
+                  - dms:List*
+                Resource: '*'
+              - Sid: DMSPolicy
+                Effect: Allow
+                Action:
+                  - dms:StartReplicationTask
+                  - dms:StopReplicationTask
+                  - dms:TestConnection
+                Resource: '*' 
+              - Sid: GluePolicy
+                Effect: Allow
+                Action:
+                  - glue:StartCrawler
+                  - glue:StopCrawler
+                  - glue:ListCrawlers
+                  - glue:BatchGetCrawlers
+                Resource: '*' 
+      RoleName: my_service_catalog_end_user
+  RDS:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Owner: Example Corp
+      SupportDescription: Support Description
+      Description:  This product creates an RDS database .
+      Distributor: Example Corp
+      SupportEmail: email@example.com
+      AcceptLanguage: en
+      SupportUrl: https://example.com
+      Name: !Sub 'RDS Database (Mysql)'
+      ProvisioningArtifactParameters:
+        - Description: Base Version
+          Info:
+            LoadTemplateFromURL: https://raw.githubusercontent.com/aws-samples/aws-service-catalog-reference-architectures/master/rds/sc-rds-mysql-ra.json
+          Name: v1.0
+  RDSPortfolioAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    DependsOn:
+      - Portfolio
+      - RDS
+    Properties:
+      AcceptLanguage: 'en'
+      PortfolioId: !Ref 'Portfolio'
+      ProductId: !Ref 'RDS'
+  RDSTemplateConstraint1:
+    Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
+    DependsOn:
+      - Portfolio
+      - RDS
+    Properties:
+      AcceptLanguage: "en"
+      Description: "Only specific VPC allowed"
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref RDS
+      Rules: '{"VPCID":{"Assertions":[{"Assert":{"Fn::EachMemberEquals":[{"Fn::ValueOfAll":["AWS::EC2::VPC::Id","Tags.Team-type"]},"Analyst-Team"]},"AssertDescription":"Only display VPC specific for analyst team"}]}}'
+  RDSTemplateConstraint2:
+    Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
+    DependsOn:
+      - Portfolio
+      - RDS
+    Properties:
+      AcceptLanguage: "en"
+      Description: "Only specific private subnet allowed"
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref RDS
+      Rules: '{"SubnetList":{"Assertions":[{"Assert":{"Fn::EachMemberEquals":[{"Fn::ValueOfAll":["AWS::EC2::Subnet::Id","Tags.Team-type"]},"Analyst-Team"]},"AssertDescription":"Only display subnets specific for Team"}]}}'
+  RDSLaunchRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: SCRDSLaunchRole 
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - servicecatalog.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: SCLaunchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: SCLaunchPolicySID
+                Effect: Allow
+                Action:                  
+                  - catalog-user:*
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:UpdateStack
+                  - s3:GetObject
+                  - ec2:CreateSecurityGroup
+                  - ec2:Authorize*
+                  - ec2:Associate*
+                  - ec2:Revoke*
+                  - ec2:Disassociate*
+                  - ec2:*Tags
+                  - ec2:Get*
+                  - ec2:List*
+                  - ec2:Describe*
+                  - iam:List*
+                  - iam:Get*
+                  - iam:Describe*
+                Resource: '*'
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: Team-type
+          Value: 'Analyst-Team'
+  subnetPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Ref cidrPublicSubnet
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Team-type
+          Value: 'Analyst-Team'
+        - Key: Name
+          Value: 'public subnet'
+        - Key: type
+          Value: 'Public'
+  NAT:
+    DependsOn: AttachGateway
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt 
+        - EIP
+        - AllocationId
+      SubnetId: !Ref DBSubnet1
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  EIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  PrivateRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NAT
+  PrivateSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref DBSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  SubnetRouteTableAssociation1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref DBSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  DBSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref cidrPrivateSubnet1
+      AvailabilityZone: !Select 
+        - '0'
+        - !GetAZs ''
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Team-type
+          Value: 'Analyst-Team'
+        - Key: Name
+          Value: 'Private subnet 1'
+        - Key: type
+          Value: 'Private'
+  DBSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref cidrPrivateSubnet2
+      AvailabilityZone: !Select 
+        - '1'
+        - !GetAZs ''
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Team-type
+          Value: 'Analyst-Team'
+        - Key: Name
+          Value: 'Private subnet 2'
+        - Key: type
+          Value: 'Private'
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+  Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    DependsOn:
+      - AttachGateway
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref subnetPublic
+      RouteTableId: !Ref RouteTable
+  S3AndIAMRolesLaunchConstraint:
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    DependsOn:
+      - Portfolio
+      - ProdS3AndIAMRoles
+      - S3AndIAMRolesLaunchRole
+      - S3AndIAMRolesPortfolioAssociation
+    Properties:
+      AcceptLanguage: 'en'
+      Description: 'This launch constraint ensures that analysts who have access to this portfolio can ask Service Catalog to a launch this product'
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref ProdS3AndIAMRoles 
+      RoleArn: !GetAtt S3AndIAMRolesLaunchRole.Arn
+  RDSRolesLaunchConstraint:
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    DependsOn:
+      - Portfolio
+      - RDS
+      - RDSLaunchRole
+      - RDSPortfolioAssociation
+    Properties:
+      AcceptLanguage: 'en'
+      Description: 'This launch constraint ensures that analysts who have access to this portfolio can ask Service Catalog to a launch this product'
+      PortfolioId: !Ref Portfolio
+      ProductId: !Ref RDS 
+      RoleArn: !GetAtt RDSLaunchRole.Arn
+Outputs:
+  SwitchRoleSCEndUser:
+    Value: !Sub 'https://signin.aws.amazon.com/switchrole?account=${AWS::AccountId}&roleName=my_service_catalog_end_user&displayName=Service Catalog End User'
