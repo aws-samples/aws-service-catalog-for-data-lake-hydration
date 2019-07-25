@@ -1,0 +1,166 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This CloudFormation sample template DMSAuroraToS3FullLoadAndOngoingReplication
+  creates an Aurora RDS instance and DMS instance in a VPC, and a S3 bucket. The
+  Aurora RDS instance is configured as the DMS Source Endpoint and the S3 bucket
+  is configured as the DMS Target Endpoint. A DMS task is created and configured
+  to migrate existing data and replicate ongoing changes from the source
+  endpoint to the target endpoint. You will be billed for the AWS resources used
+  if you create a stack from this template.(fdp-3o24sdsdpoh)
+Parameters:
+  EngineName:
+    Description: Name of the data source dataengine for DMS
+    Type: String
+    Default: mysql
+    AllowedValues:
+      - mysql
+      - oracle
+      - postgres
+      - mariadb
+      - aurora
+      - aurora-postgresql
+      - redshift
+      - s3
+      - db2
+      - sybase
+      - dynamodb
+      - mongodb
+      - sqlserver
+  ServerName:
+    Description: The source Server from which data would be imported.
+    Type: String
+    Default: ''
+  S3TargetDMSRole:
+    Description: Specify the S3 target DMS role ARN.
+    Type: String
+    Default: ''
+  DatabaseName:
+    Description: The source database from which data would be imported.
+    Type: String
+    Default: mydb
+  S3Bucket:
+    Description: Specify the S3 bucket name.
+    Type: String
+    Default: ''
+  BucketFolder:
+    Description: The folder from the S3 bucket.
+    Type: String
+    Default: data
+  DBSubnet1:
+    Description: Private Subnet ID 2.
+    Type: 'AWS::EC2::Subnet::Id'
+  DBSubnet2:
+    Description: Private Subnet id 1.
+    Type: 'AWS::EC2::Subnet::Id'
+  VpcId:
+    Description: ID of the VPC
+    Type: 'AWS::EC2::VPC::Id'
+  dbUserName:
+    Description: database user name
+    Type: String
+  dbPassword:
+    Description: database password
+    Type: String
+    NoEcho: 'true'
+  port:
+    Description: port
+    Type: String
+Resources:
+  DMSReplicationSubnetGroup:
+    Type: 'AWS::DMS::ReplicationSubnetGroup'
+    Properties:
+      ReplicationSubnetGroupDescription: Subnets available for DMS
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+  DMSSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security group for DMS Instance
+      VpcId: !Ref VpcId
+  ingress1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref DMSSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref DMSSecurityGroup
+      SourceSecurityGroupOwnerId: '105763911922'
+  egress1:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref DMSSecurityGroup
+      IpProtocol: '-1'
+      CidrIp: 0.0.0.0/0
+  DMSReplicationInstance:
+    Type: 'AWS::DMS::ReplicationInstance'
+    Properties:
+      PubliclyAccessible: true
+      ReplicationInstanceClass: dms.t2.small
+      EngineVersion: 3.1.3
+      ReplicationSubnetGroupIdentifier: !Ref DMSReplicationSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DMSSecurityGroup
+    DependsOn:
+      - DMSReplicationSubnetGroup
+      - DMSSecurityGroup
+  SourceEndpoint:
+    Type: 'AWS::DMS::Endpoint'
+    Properties:
+      DatabaseName: !Ref DatabaseName
+      EndpointType: source
+      EngineName: !Ref EngineName
+      Password: !Ref dbPassword
+      Port: !Ref port
+      ServerName: !Ref ServerName
+      Username: !Ref dbUserName
+    DependsOn:
+      - DMSReplicationInstance
+  S3TargetEndpoint:
+    Type: 'AWS::DMS::Endpoint'
+    Properties:
+      EndpointType: target
+      EngineName: S3
+      ExtraConnectionAttributes: addColumnName=true
+      S3Settings:
+        BucketName: !Ref S3Bucket
+        BucketFolder: !Ref BucketFolder
+        ServiceAccessRoleArn: !Ref S3TargetDMSRole
+    DependsOn:
+      - DMSReplicationInstance
+  DMSReplicationTask:
+    Type: 'AWS::DMS::ReplicationTask'
+    Properties:
+      MigrationType: full-load
+      ReplicationInstanceArn: !Ref DMSReplicationInstance
+      ReplicationTaskSettings: >-
+        { "Logging" : { "EnableLogging" : true, "LogComponents": [ { "Id" :
+        "SOURCE_UNLOAD", "Severity" : "LOGGER_SEVERITY_DEFAULT" }, { "Id" :
+        "SOURCE_CAPTURE", "Severity" : "LOGGER_SEVERITY_DEFAULT" }, { "Id" :
+        "TARGET_LOAD", "Severity" : "LOGGER_SEVERITY_DEFAULT" }, { "Id" :
+        "TARGET_APPLY", "Severity" : "LOGGER_SEVERITY_DEFAULT" } ] } }
+      SourceEndpointArn: !Ref SourceEndpoint
+      TableMappings: !Join 
+        - ''
+        - - >-
+            { "rules": [ { "rule-type" : "selection", "rule-id" : "1",
+            "rule-name" : "1", "object-locator" : { "schema-name" : "
+          - !Ref DatabaseName
+          - '", "table-name" : "%" }, "rule-action" : "include" } ] }'
+      TargetEndpointArn: !Ref S3TargetEndpoint
+    DependsOn:
+      - SourceEndpoint
+      - S3TargetEndpoint
+      - DMSReplicationInstance
+Outputs:
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  RegionName:
+    Value: !Ref 'AWS::Region'
+  DMSReplicationTask:
+    Value: !Ref DMSReplicationTask
+  S3TargetEndpoint:
+    Value: !Ref S3TargetEndpoint
+  SourceEndpoint:
+    Value: !Ref SourceEndpoint

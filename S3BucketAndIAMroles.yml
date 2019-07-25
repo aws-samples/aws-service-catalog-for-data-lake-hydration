@@ -1,0 +1,189 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Data lake - Set up S3 bucket, GLUE and DMS roles and provide appropriate S3
+  bucket access.(fdp-4o24sdsdpoh)
+Parameters:
+  ExistsDMSVPCRole:
+    Default: 'Y'
+    Description: 'If the dms-vpc-role exists in your account, please enter Y, else enter N'
+    Type: String
+    MinLength: '1'
+    MaxLength: '1'
+    AllowedPattern: '[YN]'
+    ConstraintDescription: Permitted value is Y or N.
+  ExistsDMSCloudwatchRole:
+    Default: 'Y'
+    Description: >-
+      If the dms-cloudwatch-logs-role exists in your account, please enter Y,
+      else enter N
+    Type: String
+    MinLength: '1'
+    MaxLength: '1'
+    AllowedPattern: '[YN]'
+    ConstraintDescription: Permitted value is Y or N.
+Conditions:
+  NotExistsDMSVPCRole: !Equals 
+    - !Ref ExistsDMSVPCRole
+    - 'N'
+  NotExistsDMSCloudwatchRole: !Equals 
+    - !Ref ExistsDMSCloudwatchRole
+    - 'N'
+Resources:
+  GlueCrawlerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Path: /
+      Policies:
+        - PolicyName: S3AccessForDMSPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject*'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !GetAtt 
+                    - S3Bucket
+                    - Arn
+                  - !Join 
+                    - ''
+                    - - !GetAtt 
+                        - S3Bucket
+                        - Arn
+                      - /*
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: !GetAtt 
+                  - S3Bucket
+                  - Arn
+    DependsOn:
+      - S3Bucket
+  S3TargetDMSRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: S3AccessForDMSPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !GetAtt 
+                    - S3Bucket
+                    - Arn
+                  - !Join 
+                    - ''
+                    - - !GetAtt 
+                        - S3Bucket
+                        - Arn
+                      - /*
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: !GetAtt 
+                  - S3Bucket
+                  - Arn
+    DependsOn:
+      - S3Bucket
+  DMSVpcRole:
+    Type: 'AWS::IAM::Role'
+    Condition: NotExistsDMSVPCRole
+    Properties:
+      RoleName: dms-vpc-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole'
+      Path: /
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingS3Bucket
+        LogFilePrefix: logs
+      Tags:
+        - Key: Logging-bucket
+          Value: !Ref LoggingS3Bucket
+  LoggingS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: LogDeliveryWrite
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  DMSCloudwatchRole:
+    Type: 'AWS::IAM::Role'
+    Condition: NotExistsDMSCloudwatchRole
+    Properties:
+      RoleName: dms-cloudwatch-logs-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole'
+      Path: /
+Outputs:
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  RegionName:
+    Value: !Ref 'AWS::Region'
+  S3BucketName:
+    Value: !Ref S3Bucket
+  GlueCrawlerIAMRoleARN:
+    Description: The ARN of the Glue Crawler IAM role
+    Value: !GetAtt 
+      - GlueCrawlerRole
+      - Arn
+  S3TargetDMSRole:
+    Description: The ARN of the S3 Target DMS role
+    Value: !GetAtt 
+      - S3TargetDMSRole
+      - Arn
