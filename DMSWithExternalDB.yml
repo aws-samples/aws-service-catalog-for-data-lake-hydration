@@ -2,13 +2,9 @@
 # SPDX-License-Identifier: MIT-0
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  This CloudFormation sample template DMSAuroraToS3FullLoadAndOngoingReplication
-  creates an Aurora RDS instance and DMS instance in a VPC, and a S3 bucket. The
-  Aurora RDS instance is configured as the DMS Source Endpoint and the S3 bucket
-  is configured as the DMS Target Endpoint. A DMS task is created and configured
-  to migrate existing data and replicate ongoing changes from the source
-  endpoint to the target endpoint. You will be billed for the AWS resources used
-  if you create a stack from this template.(fdp-3o24sdsdpoh)
+  This  sample template can be used to create a DMS replication task that can be used 
+  to migrate existing data from the source endpoint to the target S3 bucket. You will 
+  be billed for the AWS resources used if you create a stack from this template.(fdp-3o24sdsdpoh)
 Parameters:
   EngineName:
     Description: Name of the data source dataengine for DMS
