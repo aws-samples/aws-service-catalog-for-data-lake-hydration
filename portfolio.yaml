@@ -166,6 +166,9 @@ Resources:
     DependsOn:
       - Portfolio
       - ProdDMS
+      - SubnetRouteTableAssociation1
+      - PrivateSubnetRouteTableAssociation
+      - SubnetRouteTableAssociation
     Properties:
       AcceptLanguage: "en"
       Description: "Only specific VPC allowed"
@@ -177,6 +180,9 @@ Resources:
     DependsOn:
       - Portfolio
       - ProdDMS
+      - SubnetRouteTableAssociation1
+      - PrivateSubnetRouteTableAssociation
+      - SubnetRouteTableAssociation
     Properties:
       AcceptLanguage: "en"
       Description: "Only specific subnet allowed"
@@ -187,7 +193,10 @@ Resources:
     Type: "AWS::ServiceCatalog::LaunchTemplateConstraint"
     DependsOn:
       - Portfolio
-      - ProdDMS
+      - ProdDMS      
+      - SubnetRouteTableAssociation1
+      - PrivateSubnetRouteTableAssociation
+      - SubnetRouteTableAssociation
     Properties:
       AcceptLanguage: "en"
       Description: "Only specific subnet allowed"
@@ -201,6 +210,7 @@ Resources:
       - ProdDMS
       - DMSLaunchRole
       - DMSPortfolioAssociation
+
     Properties:
       AcceptLanguage: en
       Description: 'This launch constraint ensures that analysts who have access to this portfolio can ask Service Catalog to a launch this product'
@@ -461,6 +471,9 @@ Resources:
     DependsOn:
       - Portfolio
       - RDS
+      - SubnetRouteTableAssociation1
+      - PrivateSubnetRouteTableAssociation
+      - SubnetRouteTableAssociation
     Properties:
       AcceptLanguage: "en"
       Description: "Only specific VPC allowed"
@@ -472,6 +485,9 @@ Resources:
     DependsOn:
       - Portfolio
       - RDS
+      - SubnetRouteTableAssociation1
+      - PrivateSubnetRouteTableAssociation
+      - SubnetRouteTableAssociation
     Properties:
       AcceptLanguage: "en"
       Description: "Only specific private subnet allowed"
