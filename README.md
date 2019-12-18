@@ -1,6 +1,6 @@
 ## AWS Service Catalog For Data Lake Hydration
 
-This repository will contain sample code to be released for a blog
+This repository contains code associated with the blog titled "Creating and hydrating self-service data lakes with AWS Service Catalog" located here - https://aws.amazon.com/blogs/mt/creating-and-hydrating-self-service-data-lakes-with-aws-service-catalog/
 
 ## License Summary
 
